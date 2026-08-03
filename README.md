@@ -103,6 +103,22 @@ options `args` (extra arguments passed to `log_prob`), `n_burnin` and `thin`
 (to bound memory on long runs), and `save_lp` (also return the
 log-probability of every stored sample).
 
+With `save_extras=True`, `log_prob` instead returns a pair `(logp, extras)`,
+where `extras` holds additional per-walker quantities of shape
+`(n_walkers[, n_batch], n_extras)` computed alongside the log-probability —
+e.g. the log prior and log likelihood separately, or model predictions that
+are expensive to recompute. The extras of every stored sample are returned
+as the last output, correctly tracking accept/reject:
+
+```python
+def log_prob(theta):
+    logprior, loglike = ...
+    return logprior + loglike, tf.stack([logprior, loglike], axis=-1)
+
+chain, extras = affine_sample(log_prob, 1000, walkers, save_extras=True)
+# extras: (1000, 2*n_walkers, 2) — extras[i, j] belongs to sample chain[i, j]
+```
+
 Worked examples, including Gibbs sampling of a hierarchical model with the
 batched sampler, are in [`examples/`](examples/).
 

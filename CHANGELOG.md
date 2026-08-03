@@ -17,6 +17,10 @@ the one you use needs to be installed.
   and `sample_batch` consistent across the three modules. Existing
   argument positions are unchanged, with input validation for
   `n_burnin`/`thin`.
+- All samplers can store additional quantities computed inside `log_prob`:
+  with `save_extras=True`, `log_prob` returns `(logp, extras)` and the
+  extras of every stored sample are returned alongside the chain, tracking
+  accept/reject.
 - Proper packaging via `pyproject.toml` with optional extras
   (`pip install affine[tensorflow|torch|jax]`), a test suite, and CI.
 

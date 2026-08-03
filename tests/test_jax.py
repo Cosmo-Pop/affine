@@ -92,6 +92,36 @@ def test_burnin_thin_and_save_lp():
         sample(jr.PRNGKey(0), gaussian_logp, 10, state, progressbar=False, thin=0)
 
 
+def test_save_extras():
+    # extras returned by log_prob are stored per sample; they must equal the
+    # same quantities recomputed from the stored chain (accept/reject tracking)
+    def logp_with_extras(theta):
+        logp = -0.5 * jnp.sum(theta ** 2, axis=-1)
+        extras = jnp.stack([theta.sum(axis=-1), (theta ** 2).sum(axis=-1)], axis=-1)
+        return logp, extras
+
+    state = make_state(n_walkers=16)
+    chain, extras = sample(jr.PRNGKey(0), logp_with_extras, 20, state,
+                           progressbar=False, save_extras=True)
+    assert extras.shape == (20, 32, 2)
+    expected = jnp.stack([chain.sum(axis=-1), (chain ** 2).sum(axis=-1)], axis=-1)
+    assert np.allclose(np.asarray(extras), np.asarray(expected), atol=1e-5)
+
+    # combined with save_lp the return order is (chain, lp, extras)
+    chain, lp, extras = sample(jr.PRNGKey(0), logp_with_extras, 10, state,
+                               progressbar=False, save_lp=True, save_extras=True)
+    assert lp.shape == (10, 32)
+    assert extras.shape == (10, 32, 2)
+
+    # batched variant
+    state = make_state(n_walkers=16, n_batch=3)
+    chain, extras = sample_batch(jr.PRNGKey(1), logp_with_extras, 20, state,
+                                 progressbar=False, save_extras=True)
+    assert extras.shape == (20, 32, 3, 2)
+    expected = jnp.stack([chain.sum(axis=-1), (chain ** 2).sum(axis=-1)], axis=-1)
+    assert np.allclose(np.asarray(extras), np.asarray(expected), atol=1e-5)
+
+
 def test_legacy_top_level_import():
     # the jax-branch call style dispatches on the (non-callable) first argument
     from affine import sample as legacy_sample

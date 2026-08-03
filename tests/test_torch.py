@@ -127,6 +127,36 @@ def test_args_passthrough():
     assert np.all(np.abs(samples.mean(axis=0) - 3.0) < 0.15)
 
 
+def test_save_extras():
+    # extras returned by log_prob are stored per sample; they must equal the
+    # same quantities recomputed from the stored chain (accept/reject tracking)
+    def logp_with_extras(theta):
+        logp = -0.5 * torch.sum(theta ** 2, dim=-1)
+        extras = torch.stack([theta.sum(dim=-1), (theta ** 2).sum(dim=-1)], dim=-1)
+        return logp, extras
+
+    w1, w2 = make_state(n_walkers=16)
+    chain, extras = sample(logp_with_extras, 2, 16, 20, w1, w2, progress=False,
+                           save_extras=True)
+    assert extras.shape == (20, 32, 2)
+    expected = torch.stack([chain.sum(dim=-1), (chain ** 2).sum(dim=-1)], dim=-1)
+    assert torch.allclose(extras, expected, atol=1e-5)
+
+    # combined with save_lp the return order is (chain, lp, extras)
+    chain, lp, extras = sample(logp_with_extras, 2, 16, 10, w1, w2, progress=False,
+                               save_lp=True, save_extras=True)
+    assert lp.shape == (10, 32)
+    assert extras.shape == (10, 32, 2)
+
+    # batched variant
+    state = make_state(n_walkers=16, n_batch=3)
+    chain, extras = sample_batch(logp_with_extras, 20, state, progress=False,
+                                 save_extras=True)
+    assert extras.shape == (20, 32, 3, 2)
+    expected = torch.stack([chain.sum(dim=-1), (chain ** 2).sum(dim=-1)], dim=-1)
+    assert torch.allclose(extras, expected, atol=1e-5)
+
+
 def test_legacy_top_level_import():
     from affine import sample as legacy_sample
     from affine import sample_batch as legacy_batch
