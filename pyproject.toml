@@ -28,9 +28,9 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-tensorflow = ["tensorflow>=2.4"]
-torch = ["torch>=1.13"]
-jax = ["jax>=0.4.1"]
+tensorflow = ["tensorflow>=2.0"]
+torch = ["torch"]
+jax = ["jax"]
 test = ["pytest"]
 
 [project.urls]
