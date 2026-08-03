@@ -96,8 +96,12 @@ Every module also provides a batched variant that samples `n_batch`
 independent posteriors at once: walker states get an extra middle dimension
 `(n_walkers, n_batch, n_params)` and `log_prob` must return
 `(n_walkers, n_batch)`. In TensorFlow it is `affine_sample_batch`, in
-PyTorch and JAX `sample_batch`. The PyTorch version additionally supports
-`n_burnin` and `thin` to bound memory on long runs.
+PyTorch and JAX `sample_batch`.
+
+All samplers (single and batched, in all three modules) accept the keyword
+options `args` (extra arguments passed to `log_prob`), `n_burnin` and `thin`
+(to bound memory on long runs), and `save_lp` (also return the
+log-probability of every stored sample).
 
 Worked examples, including Gibbs sampling of a hierarchical model with the
 batched sampler, are in [`examples/`](examples/).

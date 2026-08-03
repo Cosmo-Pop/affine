@@ -75,6 +75,23 @@ def test_args_passthrough():
     assert np.all(np.abs(samples.mean(axis=0) - 3.0) < 0.15)
 
 
+def test_burnin_thin_and_save_lp():
+    state = make_state(n_walkers=16)
+    # stored steps: 3, 5, 7, 9 -> 4 entries
+    chain = sample(jr.PRNGKey(0), gaussian_logp, 10, state, progressbar=False,
+                   n_burnin=3, thin=2)
+    assert chain.shape == (4, 32, 2)
+
+    chain, lp = sample(jr.PRNGKey(0), gaussian_logp, 10, state, progressbar=False,
+                       save_lp=True)
+    assert lp.shape == (10, 32)
+    # saved log probs match log_prob evaluated at the stored samples
+    assert np.allclose(np.asarray(lp), np.asarray(gaussian_logp(chain)), atol=1e-5)
+
+    with pytest.raises(ValueError):
+        sample(jr.PRNGKey(0), gaussian_logp, 10, state, progressbar=False, thin=0)
+
+
 def test_legacy_top_level_import():
     # the jax-branch call style dispatches on the (non-callable) first argument
     from affine import sample as legacy_sample

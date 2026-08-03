@@ -23,8 +23,17 @@ def _nan_to_neginf(logp):
     return torch.where(torch.isnan(logp), torch.full_like(logp, float("-inf")), logp)
 
 
+def _check_steps(n_steps, n_burnin, thin):
+    # validate burn-in and thinning settings
+    if thin < 1:
+        raise ValueError(f"thin must be >= 1, got {thin}")
+    if not 0 <= n_burnin < n_steps:
+        raise ValueError(f"need 0 <= n_burnin < n_steps, got n_burnin={n_burnin}, n_steps={n_steps}")
+
+
 def sample(log_prob, n_params, n_walkers, n_steps, walkers1, walkers2,
-           progress=True, save_lp=False):
+           progress=True, save_lp=False, *, args=(), n_burnin=0, thin=1,
+           progressbar=None):
     """Sample a single posterior.
 
     Parameters
@@ -37,23 +46,34 @@ def sample(log_prob, n_params, n_walkers, n_steps, walkers1, walkers2,
         Number of parameters, and of walkers per ensemble (the shapes of
         ``walkers1``/``walkers2`` are checked against these).
     n_steps : int
-        Number of steps; the initial state counts as step 0, so the returned
-        chain has ``n_steps`` entries.
+        Number of steps; the initial state counts as step 0.
     walkers1, walkers2 : torch.Tensor
         Initial positions of the two ensembles, each of shape
         ``(n_walkers, n_params)``. The sampler runs on whatever device and
         dtype the walkers are on.
     progress : bool, optional
-        Show a tqdm progress bar.
+        Show a tqdm progress bar (``progressbar`` is accepted as an alias).
     save_lp : bool, optional
         Also return the log-probability of every stored sample.
+    args : tuple, optional
+        Extra arguments passed to ``log_prob``.
+    n_burnin : int, optional
+        Discard the first ``n_burnin`` steps from the returned chain.
+    thin : int, optional
+        Store only every ``thin``-th step after burn-in.
 
     Returns
     -------
-    chain : torch.Tensor of shape ``(n_steps, 2 * n_walkers, n_params)``
-    lp_chain : torch.Tensor of shape ``(n_steps, 2 * n_walkers)``
+    chain : torch.Tensor of shape ``(n_stored, 2 * n_walkers, n_params)``
+        where ``n_stored = ceil((n_steps - n_burnin) / thin)``; with the
+        defaults this is ``n_steps``, the initial state included as row 0.
+    lp_chain : torch.Tensor of shape ``(n_stored, 2 * n_walkers)``
         Only returned if ``save_lp=True``.
     """
+    if progressbar is not None:
+        progress = progressbar
+    _check_steps(n_steps, n_burnin, thin)
+
     current_state1 = torch.as_tensor(walkers1)
     current_state2 = torch.as_tensor(walkers2)
     for w in (current_state1, current_state2):
@@ -64,19 +84,24 @@ def sample(log_prob, n_params, n_walkers, n_steps, walkers1, walkers2,
     device, dtype = current_state1.device, current_state1.dtype
 
     # initial target log prob for the walkers
-    logp_current1 = _nan_to_neginf(log_prob(current_state1))
-    logp_current2 = _nan_to_neginf(log_prob(current_state2))
+    logp_current1 = _nan_to_neginf(log_prob(current_state1, *args))
+    logp_current2 = _nan_to_neginf(log_prob(current_state2, *args))
 
-    # holder for the whole chain, starting with the initial state
-    chain = [torch.cat([current_state1, current_state2], dim=0)]
-    if save_lp:
-        lp_chain = [torch.cat([logp_current1, logp_current2], dim=0)]
+    # the state at steps n_burnin, n_burnin + thin, ... is stored
+    def keep(step):
+        return step >= n_burnin and (step - n_burnin) % thin == 0
+
+    chain, lp_chain = [], []
+    if keep(0):
+        chain.append(torch.cat([current_state1, current_state2], dim=0))
+        if save_lp:
+            lp_chain.append(torch.cat([logp_current1, logp_current2], dim=0))
 
     # progress bar?
     loop = trange if progress else range
 
     # MCMC loop
-    for _ in loop(1, n_steps):
+    for step in loop(1, n_steps):
 
         # first set of walkers:
 
@@ -86,7 +111,7 @@ def sample(log_prob, n_params, n_walkers, n_steps, walkers1, walkers2,
         proposed_state1 = partners1 + z1[:, None] * (current_state1 - partners1)
 
         # target log prob at proposed points
-        logp_proposed1 = _nan_to_neginf(log_prob(proposed_state1))
+        logp_proposed1 = _nan_to_neginf(log_prob(proposed_state1, *args))
 
         # acceptance in log space: log u < (d - 1) log z + log p(proposed) - log p(current)
         log_accept1 = (n_params - 1) * torch.log(z1).to(logp_proposed1.dtype) + logp_proposed1 - logp_current1
@@ -105,7 +130,7 @@ def sample(log_prob, n_params, n_walkers, n_steps, walkers1, walkers2,
         proposed_state2 = partners2 + z2[:, None] * (current_state2 - partners2)
 
         # target log prob at proposed points
-        logp_proposed2 = _nan_to_neginf(log_prob(proposed_state2))
+        logp_proposed2 = _nan_to_neginf(log_prob(proposed_state2, *args))
 
         # acceptance in log space
         log_accept2 = (n_params - 1) * torch.log(z2).to(logp_proposed2.dtype) + logp_proposed2 - logp_current2
@@ -117,9 +142,10 @@ def sample(log_prob, n_params, n_walkers, n_steps, walkers1, walkers2,
         logp_current2 = torch.where(accept2, logp_proposed2, logp_current2)
 
         # append to chain
-        chain.append(torch.cat([current_state1, current_state2], dim=0))
-        if save_lp:
-            lp_chain.append(torch.cat([logp_current1, logp_current2], dim=0))
+        if keep(step):
+            chain.append(torch.cat([current_state1, current_state2], dim=0))
+            if save_lp:
+                lp_chain.append(torch.cat([logp_current1, logp_current2], dim=0))
 
     # stack up the chain and return
     chain = torch.stack(chain, dim=0)
@@ -129,7 +155,7 @@ def sample(log_prob, n_params, n_walkers, n_steps, walkers1, walkers2,
 
 
 def sample_batch(log_prob, n_steps, current_state, n_burnin=0, thin=1, args=[],
-                 progress=True, save_lp=False, device=None):
+                 progress=True, save_lp=False, device=None, *, progressbar=None):
     """Sample a batch of independent posteriors simultaneously.
 
     Same as :func:`sample`, but with a batch dimension: walker states have
@@ -151,7 +177,7 @@ def sample_batch(log_prob, n_steps, current_state, n_burnin=0, thin=1, args=[],
     args : list, optional
         Extra arguments passed to ``log_prob``.
     progress : bool, optional
-        Show a tqdm progress bar.
+        Show a tqdm progress bar (``progressbar`` is accepted as an alias).
     save_lp : bool, optional
         Also return the log-probability of every stored sample.
     device : str or torch.device, optional
@@ -165,10 +191,9 @@ def sample_batch(log_prob, n_steps, current_state, n_burnin=0, thin=1, args=[],
     lp_chain : torch.Tensor of shape ``(n_stored, 2 * n_walkers, n_batch)``
         Only returned if ``save_lp=True``.
     """
-    if thin < 1:
-        raise ValueError(f"thin must be >= 1, got {thin}")
-    if not 0 <= n_burnin < n_steps:
-        raise ValueError(f"need 0 <= n_burnin < n_steps, got n_burnin={n_burnin}, n_steps={n_steps}")
+    if progressbar is not None:
+        progress = progressbar
+    _check_steps(n_steps, n_burnin, thin)
 
     # split the current state (moving it to the requested device if any)
     current_state1 = torch.as_tensor(current_state[0])

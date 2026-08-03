@@ -12,8 +12,11 @@ the one you use needs to be installed.
 
 - Batched sampling (`sample_batch`) added to the JAX module (previously
   TensorFlow and PyTorch only).
-- PyTorch `sample_batch` keeps its `n_burnin` and `thin` options, now with
-  input validation.
+- All samplers accept the same keyword options — `args`, `n_burnin`, `thin`,
+  `save_lp` — and both `progress`/`progressbar` spellings, making `sample`
+  and `sample_batch` consistent across the three modules. Existing
+  argument positions are unchanged, with input validation for
+  `n_burnin`/`thin`.
 - Proper packaging via `pyproject.toml` with optional extras
   (`pip install affine[tensorflow|torch|jax]`), a test suite, and CI.
 

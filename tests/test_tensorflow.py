@@ -94,6 +94,21 @@ def test_args_passthrough():
     assert np.all(np.abs(samples.mean(axis=0) - 3.0) < 0.15)
 
 
+def test_burnin_thin_and_save_lp():
+    state = make_state(n_walkers=16)
+    # stored steps: 3, 5, 7, 9 -> 4 entries
+    chain = affine_sample(gaussian_logp, 10, state, progressbar=False, n_burnin=3, thin=2)
+    assert chain.shape == (4, 32, 2)
+
+    chain, lp = affine_sample(gaussian_logp, 10, state, progressbar=False, save_lp=True)
+    assert lp.shape == (10, 32)
+    # saved log probs match log_prob evaluated at the stored samples
+    assert np.allclose(lp.numpy(), gaussian_logp(chain).numpy(), atol=1e-5)
+
+    with pytest.raises(ValueError):
+        affine_sample(gaussian_logp, 10, state, progressbar=False, n_burnin=10)
+
+
 def test_legacy_top_level_import():
     from affine import affine_sample as legacy_sample
     from affine import affine_sample_batch as legacy_batch

@@ -116,6 +116,17 @@ def test_sample_batch_recovers_batch_means():
     assert lp.shape == (10, 128, 3)
 
 
+def test_args_passthrough():
+    def shifted_logp(theta, mu):
+        return -0.5 * torch.sum((theta - mu) ** 2, dim=-1)
+
+    torch.manual_seed(6)
+    w1, w2 = make_state(n_walkers=64)
+    chain = sample(shifted_logp, 2, 64, 400, w1, w2, progress=False, args=(3.0,))
+    samples = chain[200:].reshape(-1, 2).numpy()
+    assert np.all(np.abs(samples.mean(axis=0) - 3.0) < 0.15)
+
+
 def test_legacy_top_level_import():
     from affine import sample as legacy_sample
     from affine import sample_batch as legacy_batch
