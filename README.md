@@ -41,14 +41,14 @@ first entry.
 
 ```python
 import tensorflow as tf
-from affine import affine_sample   # or: from affine.tensorflow import affine_sample
+from affine.tensorflow import sample
 
 def log_prob(theta):
     return -0.5 * tf.reduce_sum(theta**2, axis=-1)
 
 walkers1 = tf.random.normal([100, 2])
 walkers2 = tf.random.normal([100, 2])
-chain = affine_sample(log_prob, 1000, [walkers1, walkers2])   # (1000, 200, 2)
+chain = sample(log_prob, 1000, [walkers1, walkers2])   # (1000, 200, 2)
 ```
 
 Reproducibility: call `tf.random.set_seed(seed)` before sampling.
@@ -64,12 +64,13 @@ def log_prob(theta):
 
 walkers1 = torch.randn(100, 2)
 walkers2 = torch.randn(100, 2)
-chain = sample(log_prob, 2, 100, 1000, walkers1, walkers2)    # (1000, 200, 2)
+chain = sample(log_prob, 1000, [walkers1, walkers2])    # (1000, 200, 2)
 ```
 
-The sampler runs on whatever device and dtype the walkers are on. Pass
-`save_lp=True` to also get the log-probability of every sample.
-Reproducibility: call `torch.manual_seed(seed)` before sampling.
+The sampler runs on whatever device and dtype the walkers are on (or pass
+`device=` to move them first). Pass `save_lp=True` to also get the
+log-probability of every sample. Reproducibility: call
+`torch.manual_seed(seed)` before sampling.
 
 ### JAX
 
@@ -92,15 +93,16 @@ chains are exactly reproducible for a given key.
 
 ### Batched sampling
 
-Every module also provides a batched variant that samples `n_batch`
-independent posteriors at once: walker states get an extra middle dimension
-`(n_walkers, n_batch, n_params)` and `log_prob` must return
-`(n_walkers, n_batch)`. In TensorFlow it is `affine_sample_batch`, in
-PyTorch and JAX `sample_batch`.
+Every module also provides `sample_batch`, a batched variant that samples
+`n_batch` independent posteriors at once: walker states get an extra middle
+dimension `(n_walkers, n_batch, n_params)` and `log_prob` must return
+`(n_walkers, n_batch)`.
 
-All samplers (single and batched, in all three modules) accept the keyword
-options `args` (extra arguments passed to `log_prob`), `n_burnin` and `thin`
-(to bound memory on long runs), and `save_lp` (also return the
+All samplers (single and batched, in all three modules) share one call
+signature, `sample(log_prob, n_steps, current_state, ...)` (with the PRNG
+key first in JAX), and accept the same keyword options: `args` (extra
+arguments passed to `log_prob`), `n_burnin` and `thin` (to bound memory on
+long runs), `progress` (show a progress bar) and `save_lp` (also return the
 log-probability of every stored sample).
 
 With `save_extras=True`, `log_prob` instead returns a pair `(logp, extras)`,
@@ -115,7 +117,7 @@ def log_prob(theta):
     logprior, loglike = ...
     return logprior + loglike, tf.stack([logprior, loglike], axis=-1)
 
-chain, extras = affine_sample(log_prob, 1000, walkers, save_extras=True)
+chain, extras = sample(log_prob, 1000, walkers, save_extras=True)
 # extras: (1000, 2*n_walkers, 2) — extras[i, j] belongs to sample chain[i, j]
 ```
 
@@ -124,14 +126,15 @@ batched sampler, are in [`examples/`](examples/).
 
 <!-- ## Backwards compatibility
 
-The historical entry points of all three original branches of this
-repository still work at the top level:
+The historical entry points still work at the top level:
 
 - `from affine import affine_sample, affine_sample_batch` — old `main`
-  branch (TensorFlow).
+  branch (TensorFlow); the same names are kept as aliases in
+  `affine.tensorflow`.
 - `from affine import sample, sample_batch` — old `torch` and `jax`
-  branches; the two `sample` call styles are distinguished automatically by
-  their first argument.
+  branches, told apart by their first argument. The old torch-branch
+  positional style `sample(log_prob, n_params, n_walkers, n_steps, walkers1,
+  walkers2)` is no longer accepted; pass `(log_prob, n_steps, current_state)`.
 
 See [CHANGELOG.md](CHANGELOG.md) for bug fixes relative to the old branches. -->
 

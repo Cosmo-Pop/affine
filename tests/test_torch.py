@@ -19,24 +19,21 @@ def make_state(n_walkers=64, n_params=2, n_batch=None, seed=0, dtype=torch.float
 
 def test_sample_shapes():
     w1, w2 = make_state(n_walkers=16, n_params=3)
-    chain = sample(gaussian_logp, 3, 16, 10, w1, w2, progress=False)
+    chain = sample(gaussian_logp, 10, (w1, w2), progress=False)
     assert chain.shape == (10, 32, 3)
 
-    chain, lp = sample(gaussian_logp, 3, 16, 10, w1, w2, progress=False, save_lp=True)
+    chain, lp = sample(gaussian_logp, 10, (w1, w2), progress=False, save_lp=True)
     assert chain.shape == (10, 32, 3)
     assert lp.shape == (10, 32)
 
-
-def test_wrong_walker_shape_raises():
-    w1, w2 = make_state(n_walkers=16, n_params=3)
-    with pytest.raises(ValueError):
-        sample(gaussian_logp, 2, 16, 10, w1, w2, progress=False)
+    chain = sample(gaussian_logp, 10, (w1, w2), progress=False, device="cpu")
+    assert chain.shape == (10, 32, 3)
 
 
 def test_recovers_gaussian_moments():
     torch.manual_seed(1)
     w1, w2 = make_state(n_walkers=64)
-    chain = sample(gaussian_logp, 2, 64, 600, w1, w2, progress=False)
+    chain = sample(gaussian_logp, 600, (w1, w2), progress=False)
     samples = chain[300:].reshape(-1, 2).numpy()
     assert np.all(np.abs(samples.mean(axis=0)) < 0.1)
     assert np.all(np.abs(samples.std(axis=0) - 1.0) < 0.15)
@@ -52,7 +49,7 @@ def test_nan_logp_is_rejected():
     torch.manual_seed(2)
     gen = torch.Generator().manual_seed(3)
     w = 0.5 + torch.rand((32, 2), generator=gen)
-    chain = sample(half_gaussian_logp, 2, 32, 200, w, w + 0.1, progress=False)
+    chain = sample(half_gaussian_logp, 200, (w, w + 0.1), progress=False)
     assert torch.all(torch.isfinite(chain))
     assert torch.all(chain[..., 0] >= 0.0)
 
@@ -87,15 +84,15 @@ def test_burnin_and_thin():
 def test_reproducible_with_manual_seed():
     w1, w2 = make_state()
     torch.manual_seed(42)
-    chain1 = sample(gaussian_logp, 2, 64, 50, w1, w2, progress=False)
+    chain1 = sample(gaussian_logp, 50, (w1, w2), progress=False)
     torch.manual_seed(42)
-    chain2 = sample(gaussian_logp, 2, 64, 50, w1, w2, progress=False)
+    chain2 = sample(gaussian_logp, 50, (w1, w2), progress=False)
     assert torch.equal(chain1, chain2)
 
 
 def test_float64_supported():
     w1, w2 = make_state(dtype=torch.float64)
-    chain = sample(gaussian_logp, 2, 64, 20, w1, w2, progress=False)
+    chain = sample(gaussian_logp, 20, (w1, w2), progress=False)
     assert chain.dtype == torch.float64
 
 
@@ -122,7 +119,7 @@ def test_args_passthrough():
 
     torch.manual_seed(6)
     w1, w2 = make_state(n_walkers=64)
-    chain = sample(shifted_logp, 2, 64, 400, w1, w2, progress=False, args=(3.0,))
+    chain = sample(shifted_logp, 400, (w1, w2), progress=False, args=(3.0,))
     samples = chain[200:].reshape(-1, 2).numpy()
     assert np.all(np.abs(samples.mean(axis=0) - 3.0) < 0.15)
 
@@ -136,14 +133,14 @@ def test_save_extras():
         return logp, extras
 
     w1, w2 = make_state(n_walkers=16)
-    chain, extras = sample(logp_with_extras, 2, 16, 20, w1, w2, progress=False,
+    chain, extras = sample(logp_with_extras, 20, (w1, w2), progress=False,
                            save_extras=True)
     assert extras.shape == (20, 32, 2)
     expected = torch.stack([chain.sum(dim=-1), (chain ** 2).sum(dim=-1)], dim=-1)
     assert torch.allclose(extras, expected, atol=1e-5)
 
     # combined with save_lp the return order is (chain, lp, extras)
-    chain, lp, extras = sample(logp_with_extras, 2, 16, 10, w1, w2, progress=False,
+    chain, lp, extras = sample(logp_with_extras, 10, (w1, w2), progress=False,
                                save_lp=True, save_extras=True)
     assert lp.shape == (10, 32)
     assert extras.shape == (10, 32, 2)
@@ -162,7 +159,7 @@ def test_legacy_top_level_import():
     from affine import sample_batch as legacy_batch
 
     w1, w2 = make_state(n_walkers=16, n_params=3)
-    chain = legacy_sample(gaussian_logp, 3, 16, 10, w1, w2, progress=False)
+    chain = legacy_sample(gaussian_logp, 10, (w1, w2), progress=False)
     assert chain.shape == (10, 32, 3)
 
     state = list(make_state(n_walkers=16, n_batch=4))

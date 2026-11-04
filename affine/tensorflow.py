@@ -6,12 +6,15 @@ the other half, so that a whole half is evolved with a single vectorized call
 to the target log-probability.
 
 For reproducible chains call ``tf.random.set_seed(<seed>)`` before sampling.
+
+``affine_sample`` and ``affine_sample_batch``, the names this module had in
+1.0.0, are kept as aliases of ``sample`` and ``sample_batch``.
 """
 
 import tensorflow as tf
 from tqdm import trange
 
-__all__ = ["affine_sample", "affine_sample_batch"]
+__all__ = ["sample", "sample_batch"]
 
 
 def _nan_to_neginf(logp):
@@ -36,9 +39,8 @@ def _call_log_prob(log_prob, theta, args, save_extras):
     return _nan_to_neginf(log_prob(theta, *args)), None
 
 
-def affine_sample(log_prob, n_steps, current_state, args=[], progressbar=True, *,
-                  n_burnin=0, thin=1, save_lp=False, save_extras=False,
-                  progress=None):
+def sample(log_prob, n_steps, current_state, n_burnin=0, thin=1, args=(),
+           progress=True, save_lp=False, *, save_extras=False, progressbar=None):
     """Sample a single posterior.
 
     Parameters
@@ -51,14 +53,14 @@ def affine_sample(log_prob, n_steps, current_state, args=[], progressbar=True, *
         Number of steps; the initial state counts as step 0.
     current_state : pair of tensors
         The two walker ensembles, each of shape ``(n_walkers, n_params)``.
-    args : list, optional
-        Extra arguments passed to ``log_prob``.
-    progressbar : bool, optional
-        Show a tqdm progress bar (``progress`` is accepted as an alias).
     n_burnin : int, optional
         Discard the first ``n_burnin`` steps from the returned chain.
     thin : int, optional
         Store only every ``thin``-th step after burn-in.
+    args : tuple, optional
+        Extra arguments passed to ``log_prob``.
+    progress : bool, optional
+        Show a tqdm progress bar (``progressbar`` is accepted as an alias).
     save_lp : bool, optional
         Also return the log-probability of every stored sample.
     save_extras : bool, optional
@@ -78,8 +80,8 @@ def affine_sample(log_prob, n_steps, current_state, args=[], progressbar=True, *
     extras_chain : tf.Tensor of shape ``(n_stored, 2 * n_walkers, n_extras)``
         Only returned if ``save_extras=True`` (always the last return value).
     """
-    if progress is not None:
-        progressbar = progress
+    if progressbar is not None:
+        progress = progressbar
     _check_steps(n_steps, n_burnin, thin)
 
     # split the current state
@@ -107,7 +109,7 @@ def affine_sample(log_prob, n_steps, current_state, args=[], progressbar=True, *
             extras_chain.append(tf.concat([extras_current1, extras_current2], axis=0))
 
     # progress bar?
-    loop = trange if progressbar else range
+    loop = trange if progress else range
 
     # MCMC loop
     for step in loop(1, n_steps):
@@ -170,12 +172,11 @@ def affine_sample(log_prob, n_steps, current_state, args=[], progressbar=True, *
     return returns if len(returns) > 1 else chain
 
 
-def affine_sample_batch(log_prob, n_steps, current_state, args=[], progressbar=True, *,
-                        n_burnin=0, thin=1, save_lp=False, save_extras=False,
-                        progress=None):
+def sample_batch(log_prob, n_steps, current_state, n_burnin=0, thin=1, args=(),
+                 progress=True, save_lp=False, *, save_extras=False, progressbar=None):
     """Sample a batch of independent posteriors simultaneously.
 
-    Same as :func:`affine_sample`, but with an extra batch dimension: walker
+    Same as :func:`sample`, but with an extra batch dimension: walker
     states have shape ``(n_walkers, n_batch, n_params)``, ``log_prob`` must
     return shape ``(n_walkers, n_batch)``, and with ``save_extras=True`` the
     extras must have shape ``(n_walkers, n_batch, n_extras)``.
@@ -189,8 +190,8 @@ def affine_sample_batch(log_prob, n_steps, current_state, args=[], progressbar=T
     extras_chain : tf.Tensor of shape ``(n_stored, 2 * n_walkers, n_batch, n_extras)``
         Only returned if ``save_extras=True`` (always the last return value).
     """
-    if progress is not None:
-        progressbar = progress
+    if progressbar is not None:
+        progress = progressbar
     _check_steps(n_steps, n_burnin, thin)
 
     # split the current state
@@ -218,7 +219,7 @@ def affine_sample_batch(log_prob, n_steps, current_state, args=[], progressbar=T
             extras_chain.append(tf.concat([extras_current1, extras_current2], axis=0))
 
     # progress bar?
-    loop = trange if progressbar else range
+    loop = trange if progress else range
 
     # MCMC loop
     for step in loop(1, n_steps):
@@ -279,3 +280,8 @@ def affine_sample_batch(log_prob, n_steps, current_state, args=[], progressbar=T
     if save_extras:
         returns += (tf.stack(extras_chain, axis=0),)
     return returns if len(returns) > 1 else chain
+
+
+# the names this module had in 1.0.0
+affine_sample = sample
+affine_sample_batch = sample_batch

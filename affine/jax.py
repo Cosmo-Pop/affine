@@ -38,8 +38,8 @@ def _call_log_prob(log_prob, theta, args, save_extras):
     return _nan_to_neginf(log_prob(theta, *args)), None
 
 
-def sample(rng, log_prob, n_steps, current_state, progressbar=True, args=(), *,
-           n_burnin=0, thin=1, save_lp=False, save_extras=False, progress=None):
+def sample(rng, log_prob, n_steps, current_state, n_burnin=0, thin=1, args=(),
+           progress=True, save_lp=False, *, save_extras=False, progressbar=None):
     """Sample a single posterior.
 
     Parameters
@@ -55,14 +55,14 @@ def sample(rng, log_prob, n_steps, current_state, progressbar=True, args=(), *,
         Number of steps; the initial state counts as step 0.
     current_state : pair of arrays
         The two walker ensembles, each of shape ``(n_walkers, n_params)``.
-    progressbar : bool, optional
-        Show a tqdm progress bar (``progress`` is accepted as an alias).
-    args : tuple, optional
-        Extra arguments passed to ``log_prob``.
     n_burnin : int, optional
         Discard the first ``n_burnin`` steps from the returned chain.
     thin : int, optional
         Store only every ``thin``-th step after burn-in.
+    args : tuple, optional
+        Extra arguments passed to ``log_prob``.
+    progress : bool, optional
+        Show a tqdm progress bar (``progressbar`` is accepted as an alias).
     save_lp : bool, optional
         Also return the log-probability of every stored sample.
     save_extras : bool, optional
@@ -82,8 +82,8 @@ def sample(rng, log_prob, n_steps, current_state, progressbar=True, args=(), *,
     extras_chain : jnp.ndarray of shape ``(n_stored, 2 * n_walkers, n_extras)``
         Only returned if ``save_extras=True`` (always the last return value).
     """
-    if progress is not None:
-        progressbar = progress
+    if progressbar is not None:
+        progress = progressbar
     _check_steps(n_steps, n_burnin, thin)
 
     # split the current state
@@ -111,7 +111,7 @@ def sample(rng, log_prob, n_steps, current_state, progressbar=True, args=(), *,
             extras_chain.append(jnp.concatenate([extras_current1, extras_current2], axis=0))
 
     # progress bar?
-    loop = trange if progressbar else range
+    loop = trange if progress else range
 
     # MCMC loop
     for step in loop(1, n_steps):
@@ -177,8 +177,8 @@ def sample(rng, log_prob, n_steps, current_state, progressbar=True, args=(), *,
     return returns if len(returns) > 1 else chain
 
 
-def sample_batch(rng, log_prob, n_steps, current_state, progressbar=True, args=(), *,
-                 n_burnin=0, thin=1, save_lp=False, save_extras=False, progress=None):
+def sample_batch(rng, log_prob, n_steps, current_state, n_burnin=0, thin=1, args=(),
+                 progress=True, save_lp=False, *, save_extras=False, progressbar=None):
     """Sample a batch of independent posteriors simultaneously.
 
     Same as :func:`sample`, but with an extra batch dimension: walker states
@@ -195,8 +195,8 @@ def sample_batch(rng, log_prob, n_steps, current_state, progressbar=True, args=(
     extras_chain : jnp.ndarray of shape ``(n_stored, 2 * n_walkers, n_batch, n_extras)``
         Only returned if ``save_extras=True`` (always the last return value).
     """
-    if progress is not None:
-        progressbar = progress
+    if progressbar is not None:
+        progress = progressbar
     _check_steps(n_steps, n_burnin, thin)
 
     # split the current state
@@ -224,7 +224,7 @@ def sample_batch(rng, log_prob, n_steps, current_state, progressbar=True, args=(
             extras_chain.append(jnp.concatenate([extras_current1, extras_current2], axis=0))
 
     # progress bar?
-    loop = trange if progressbar else range
+    loop = trange if progress else range
 
     # MCMC loop
     for step in loop(1, n_steps):

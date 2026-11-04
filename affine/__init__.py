@@ -2,7 +2,7 @@
 
 Pick the module for your framework:
 
-    from affine.tensorflow import affine_sample, affine_sample_batch
+    from affine.tensorflow import sample, sample_batch
     from affine.torch import sample, sample_batch
     from affine.jax import sample, sample_batch
 
@@ -15,24 +15,24 @@ __version__ = "1.0.0"
 
 
 def affine_sample(*args, **kwargs):
-    """TensorFlow sampler (old main branch); see affine.tensorflow.affine_sample."""
-    from .tensorflow import affine_sample
-    return affine_sample(*args, **kwargs)
+    """TensorFlow sampler (old main branch); see affine.tensorflow.sample."""
+    from .tensorflow import sample
+    return sample(*args, **kwargs)
 
 
 def affine_sample_batch(*args, **kwargs):
-    """TensorFlow batch sampler (old main branch); see affine.tensorflow.affine_sample_batch."""
-    from .tensorflow import affine_sample_batch
-    return affine_sample_batch(*args, **kwargs)
+    """TensorFlow batch sampler (old main branch); see affine.tensorflow.sample_batch."""
+    from .tensorflow import sample_batch
+    return sample_batch(*args, **kwargs)
 
 
 def sample(*args, **kwargs):
     """Old torch- and jax-branch sampler, told apart by the first argument.
 
-    torch style: sample(log_prob, n_params, n_walkers, n_steps, walkers1, walkers2, ...)
+    torch style: sample(log_prob, n_steps, current_state, ...)
     jax style:   sample(rng, log_prob, n_steps, current_state, ...)
     """
-    if (args and callable(args[0])) or "n_params" in kwargs:
+    if args and callable(args[0]):
         from .torch import sample
     else:
         from .jax import sample

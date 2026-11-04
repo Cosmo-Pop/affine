@@ -41,8 +41,8 @@ def _call_log_prob(log_prob, theta, args, save_extras):
     return _nan_to_neginf(log_prob(theta, *args)), None
 
 
-def sample(log_prob, n_params, n_walkers, n_steps, walkers1, walkers2,
-           progress=True, save_lp=False, *, args=(), n_burnin=0, thin=1,
+def sample(log_prob, n_steps, current_state, n_burnin=0, thin=1, args=(),
+           progress=True, save_lp=False, device=None, *,
            save_extras=False, progressbar=None):
     """Sample a single posterior.
 
@@ -52,25 +52,24 @@ def sample(log_prob, n_params, n_walkers, n_steps, walkers1, walkers2,
         Vectorized target log-probability: maps parameters of shape
         ``(n_walkers, n_params)`` to log-probabilities of shape
         ``(n_walkers,)``. NaN values are treated as -inf (proposal rejected).
-    n_params, n_walkers : int
-        Number of parameters, and of walkers per ensemble (the shapes of
-        ``walkers1``/``walkers2`` are checked against these).
     n_steps : int
         Number of steps; the initial state counts as step 0.
-    walkers1, walkers2 : torch.Tensor
-        Initial positions of the two ensembles, each of shape
-        ``(n_walkers, n_params)``. The sampler runs on whatever device and
-        dtype the walkers are on.
-    progress : bool, optional
-        Show a tqdm progress bar (``progressbar`` is accepted as an alias).
-    save_lp : bool, optional
-        Also return the log-probability of every stored sample.
-    args : tuple, optional
-        Extra arguments passed to ``log_prob``.
+    current_state : pair of torch.Tensor
+        The two walker ensembles, each of shape ``(n_walkers, n_params)``.
+        The sampler runs on whatever device and dtype the walkers are on.
     n_burnin : int, optional
         Discard the first ``n_burnin`` steps from the returned chain.
     thin : int, optional
         Store only every ``thin``-th step after burn-in.
+    args : tuple, optional
+        Extra arguments passed to ``log_prob``.
+    progress : bool, optional
+        Show a tqdm progress bar (``progressbar`` is accepted as an alias).
+    save_lp : bool, optional
+        Also return the log-probability of every stored sample.
+    device : str or torch.device, optional
+        Move the walkers to this device first. Default: run on whatever
+        device the walkers are already on.
     save_extras : bool, optional
         If True, ``log_prob`` must instead return a pair ``(logp, extras)``,
         where ``extras`` holds additional per-walker quantities of shape
@@ -92,14 +91,16 @@ def sample(log_prob, n_params, n_walkers, n_steps, walkers1, walkers2,
         progress = progressbar
     _check_steps(n_steps, n_burnin, thin)
 
-    current_state1 = torch.as_tensor(walkers1)
-    current_state2 = torch.as_tensor(walkers2)
-    for w in (current_state1, current_state2):
-        if tuple(w.shape) != (n_walkers, n_params):
-            raise ValueError(
-                f"walkers must have shape (n_walkers, n_params) = ({n_walkers}, {n_params}), "
-                f"got {tuple(w.shape)}")
+    # split the current state (moving it to the requested device if any)
+    current_state1 = torch.as_tensor(current_state[0])
+    current_state2 = torch.as_tensor(current_state[1])
+    if device is not None:
+        current_state1 = current_state1.to(device)
+        current_state2 = current_state2.to(device)
     device, dtype = current_state1.device, current_state1.dtype
+
+    # pull out the number of walkers and parameters
+    n_walkers, n_params = current_state1.shape
 
     # initial target log prob (and extras) for the walkers
     logp_current1, extras_current1 = _call_log_prob(log_prob, current_state1, args, save_extras)
@@ -183,7 +184,7 @@ def sample(log_prob, n_params, n_walkers, n_steps, walkers1, walkers2,
     return returns if len(returns) > 1 else chain
 
 
-def sample_batch(log_prob, n_steps, current_state, n_burnin=0, thin=1, args=[],
+def sample_batch(log_prob, n_steps, current_state, n_burnin=0, thin=1, args=(),
                  progress=True, save_lp=False, device=None, *,
                  save_extras=False, progressbar=None):
     """Sample a batch of independent posteriors simultaneously.
@@ -205,7 +206,7 @@ def sample_batch(log_prob, n_steps, current_state, n_burnin=0, thin=1, args=[],
         Discard the first ``n_burnin`` steps from the returned chain.
     thin : int, optional
         Store only every ``thin``-th step after burn-in.
-    args : list, optional
+    args : tuple, optional
         Extra arguments passed to ``log_prob``.
     progress : bool, optional
         Show a tqdm progress bar (``progressbar`` is accepted as an alias).

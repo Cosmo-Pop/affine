@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+Brings the three modules into line with each other: the same function names,
+keyword names and call signatures everywhere, with the PyTorch module as the
+reference.
+
+### Changed
+
+- **tensorflow:** `affine_sample` and `affine_sample_batch` are renamed
+  `sample` and `sample_batch`, as in the other two modules. The old names
+  are kept as aliases in `affine.tensorflow`, and the top-level
+  `affine.affine_sample`/`affine.affine_sample_batch` still work.
+- **torch:** `sample` now takes `(log_prob, n_steps, current_state, ...)`
+  like `sample_batch` and the other modules, inferring `n_walkers` and
+  `n_params` from the walkers' shape, and accepts `device=`. The old
+  torch-branch call style
+  `sample(log_prob, n_params, n_walkers, n_steps, walkers1, walkers2, ...)`
+  is no longer accepted.
+- All samplers share one signature:
+  `sample([rng,] log_prob, n_steps, current_state, n_burnin=0, thin=1,
+  args=(), progress=True, save_lp=False, [device=None,] *, save_extras=False,
+  progressbar=None)`, with `rng` only in JAX and `device` only in PyTorch.
+  `progress` is the primary spelling of the progress-bar flag in every
+  module (`progressbar` remains an alias). In JAX and TensorFlow the
+  optional arguments changed order, so pass them by keyword.
+
 ## 1.0.0
 
 Merges the historical `main` (TensorFlow), `torch`, and `jax` branches into
